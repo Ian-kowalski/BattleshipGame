@@ -6,12 +6,12 @@
 
 <game-board></game-board>
 
-<chat-component></chat-component>
 
 @section Scripts {
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/5.0.11/signalr.min.js"></script>
+    <script src="~/js/signalr/dist/browser/signalr.js"></script>
     <script src="~/js/components/game-board.js"></script>
     <script src="~/js/components/chat.js"></script>
+    <link rel="stylesheet" href="~/css/game-board.css">
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             const connection = new signalR.HubConnectionBuilder()
@@ -41,9 +41,11 @@
                     const { x, y } = event.detail;
                     console.log(`Cell clicked at (${x}, ${y})`);
                     // Send move to the server
-                    connection.invoke("SendMove", "Player1", x, y).catch(function (err) {
-                        return console.error(err.toString());
-                    });
+                    connection.invoke("SendMove", "Player1", x, y)
+                        .catch(function (err) {
+                            console.error("Error invoking SendMove:", err);
+                            console.error("Stack trace:", err.stack);
+                        });
                 });
 
                 // Example of marking a ship on the own board

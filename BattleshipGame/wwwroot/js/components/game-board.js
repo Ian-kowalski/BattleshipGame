@@ -1,82 +1,57 @@
-class GameBoard extends HTMLElement {
-    constructor() {
-        super();
-        this.attachShadow({ mode: 'open' });
-        
-        this.render();
-    }
-    loadStylesheet() {
-        const link = document.createElement('link');
-        link.setAttribute('rel', 'stylesheet');
-        link.setAttribute('href', '../css/game-board.css');
-        this.shadowRoot.appendChild(link);
-    }
-
-    render() {
-        this.shadowRoot.innerHTML = `
-              <div class="board-container">
-                <div class="board own-board" id="ownBoard">
-                    ${this.createBoard()}
-                </div>
-                <div class="board opponent-board" id="opponentBoard">
-                    ${this.createBoard()}
-                </div>
-            </div>
-        `;
-
-        // Add event listeners for the opponent's board cells
-        const opponentBoard = this.shadowRoot.getElementById('opponentBoard');
-        opponentBoard.querySelectorAll('.cell').forEach(cell => {
-            cell.addEventListener('click', (event) => this.handleCellClick(event));
-            cell.addEventListener('mouseover', (event) => this.handleCellMouseOver(event));
-            cell.addEventListener('mouseout', (event) => this.handleCellMouseOut(event));
-        });
-        this.loadStylesheet(); // Call loadStylesheet method here
-    }
-
-    createBoard() {
-        let cells = '';
-        for (let i = 0; i < 10; i++) {
-            for (let j = 0; j < 10; j++) {
-                cells += `<div class="cell" data-x="${i}" data-y="${j}"></div>`;
-            }
-        }
-        return cells;
-    }
-
-    handleCellClick(event) {
-        const cell = event.target;
-        const x = cell.getAttribute('data-x');
-        const y = cell.getAttribute('data-y');
-        this.dispatchEvent(new CustomEvent('cellClick', {
-            detail: { x, y }
-        }));
-    }
-
-    handleCellMouseOver(event) {
-        const cell = event.target;
-        cell.classList.add('highlight');
-    }
-
-    handleCellMouseOut(event) {
-        const cell = event.target;
-        cell.classList.remove('highlight');
-    }
-
-    markShip(x, y) {
-        const cell = this.shadowRoot.querySelector(`.own-board .cell[data-x="${x}"][data-y="${y}"]`);
-        cell.classList.add('ship');
-    }
-
-    markHit(x, y) {
-        const cell = this.shadowRoot.querySelector(`.opponent-board .cell[data-x="${x}"][data-y="${y}"]`);
-        cell.classList.add('hit');
-    }
-
-    markMiss(x, y) {
-        const cell = this.shadowRoot.querySelector(`.opponent-board .cell[data-x="${x}"][data-y="${y}"]`);
-        cell.classList.add('miss');
-    }
+@{
+    ViewData["Title"] = "Battleship Game";
 }
 
-customElements.define('game-board', GameBoard);
+<h2>Battleship Game</h2>
+
+<game-board></game-board>
+<button id="makeMove">Make Move</button>
+
+@section Scripts {
+    <script src="~/js/signalr/dist/browser/signalr.js"></script>
+    <script src="~/js/components/game-board.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const connection = new signalR.HubConnectionBuilder()
+                .withUrl("/gameHub")
+                .build();
+
+            connection.on("ReceiveMove", function (user, x, y) {
+                console.log(user + ' made a move at (' + x + ',' + y + ')');
+                const board = document.querySelector('game-board');
+                const isHit = Math.random() > 0.5; // Example logic
+                if (isHit) {
+                    board.markHit(x, y);
+                } else {
+                    board.markMiss(x, y);
+                }
+            });
+
+            connection.on("ReceiveMessage", function (user, message) {
+                console.log(user + ': ' + message);
+            });
+
+            connection.start().then(function () {
+                console.log('SignalR connected');
+
+                const board = document.querySelector('game-board');
+                board.addEventListener('cellClick', function (event) {
+                    const { x, y } = event.detail;
+                    console.log(`Cell clicked at (${x}, ${y})`);
+                    // Send move to the server
+                    connection.invoke("SendMove", "Player1", x, y)
+                        .catch(function (err) {
+                            console.error("Error sending move:", err);
+                        });
+                });
+
+                // Example of marking a ship on the own board
+                board.markShip(0, 0);
+                board.markShip(0, 1);
+                board.markShip(0, 2);
+            }).catch(function (err) {
+                console.error("Error starting SignalR connection:", err);
+            });
+        });
+    </script>
+}
