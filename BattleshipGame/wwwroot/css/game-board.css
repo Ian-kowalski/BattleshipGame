@@ -1,0 +1,41 @@
+﻿.board-container {
+    display: flex;
+    justify-content: space-around;
+    margin: 20px 0;
+}
+
+.board {
+    display: grid;
+    grid-template-columns: repeat(10, 30px);
+    grid-template-rows: repeat(10, 30px);
+    gap: 2px;
+}
+
+.cell {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #000;
+    text-align: center;
+    line-height: 30px;
+    cursor: pointer;
+}
+
+    .cell:hover {
+        background-color: #f0f0f0; /* Hover effect color */
+    }
+
+.own-board .cell.ship {
+    background-color: #7ec8e3; /* Color for ships */
+}
+
+.opponent-board .cell.hit {
+    background-color: #e57373; /* Color for hits */
+}
+
+.opponent-board .cell.miss {
+    background-color: #b0bec5; /* Color for misses */
+}
+
+.cell.highlight {
+    background-color: #ffff99; /* Highlight color */
+}
