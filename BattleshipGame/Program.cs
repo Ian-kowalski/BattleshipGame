@@ -1,7 +1,8 @@
 using BattleshipGame.Data;
-using BattleshipGame.Hubs;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+
+using SignalRChat.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 

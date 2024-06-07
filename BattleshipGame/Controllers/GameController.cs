@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using BattleshipGame.Models;
 
 namespace BattleshipGame.Controllers
 {
@@ -6,7 +7,10 @@ namespace BattleshipGame.Controllers
     {
         public IActionResult Game()
         {
-            return View();
+            GameBoard gameBoard = new GameBoard();
+            ShipGenerator.GenerateShips(gameBoard);
+            GameBoardViewModel viewModel = new GameBoardViewModel(gameBoard);
+            return View(viewModel);
         }
     }
 }

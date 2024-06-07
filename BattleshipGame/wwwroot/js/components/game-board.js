@@ -1,57 +1,125 @@
-@{
-    ViewData["Title"] = "Battleship Game";
-}
+class GameBoard extends HTMLElement {
+    constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+        this.render();
+    }
 
-<h2>Battleship Game</h2>
+    render() {
+        this.shadowRoot.innerHTML = `
+            <link rel="stylesheet" href="/css/game-board.css">
+            <div id="container">
+                <div id="chat">
+                    <div id="messages"></div>
+                    <div id="chatInput">
+                        <input type="text" id="messageInput" placeholder="Type a message...">
+                        <button id="sendButton">Send</button>
+                    </div>
+                </div>
+                <div id="boards">
+                    <div id="yourBoard" class="board"></div>
+                    <div id="trackingBoard" class="board"></div>
+                </div>
+            </div>
+        `;
 
-<game-board></game-board>
-<button id="makeMove">Make Move</button>
+        console.log('Game board initialized.');
 
-@section Scripts {
-    <script src="~/js/signalr/dist/browser/signalr.js"></script>
-    <script src="~/js/components/game-board.js"></script>
-    <script>
-        document.addEventListener("DOMContentLoaded", function () {
-            const connection = new signalR.HubConnectionBuilder()
-                .withUrl("/gameHub")
-                .build();
+        //this.initializeBoards();
+        this.initializeChat();
+    }
 
-            connection.on("ReceiveMove", function (user, x, y) {
-                console.log(user + ' made a move at (' + x + ',' + y + ')');
-                const board = document.querySelector('game-board');
-                const isHit = Math.random() > 0.5; // Example logic
-                if (isHit) {
-                    board.markHit(x, y);
-                } else {
-                    board.markMiss(x, y);
-                }
+    initializeBoards() {
+        const yourBoard = this.shadowRoot.getElementById('yourBoard');
+        const trackingBoard = this.shadowRoot.getElementById('trackingBoard');
+
+        console.log('Initializing game boards...');
+
+        for (let i = 0; i < 100; i++) {
+            const yourCell = document.createElement('div');
+            yourCell.className = 'cell';
+            yourBoard.appendChild(yourCell);
+
+            const trackingCell = document.createElement('div');
+            trackingCell.className = 'cell';
+            trackingBoard.appendChild(trackingCell);
+
+            // Add hover effect only for tracking board cells
+            trackingCell.addEventListener('mouseover', () => {
+                trackingCell.classList.add('hover');
             });
 
-            connection.on("ReceiveMessage", function (user, message) {
-                console.log(user + ': ' + message);
+            trackingCell.addEventListener('mouseout', () => {
+                trackingCell.classList.remove('hover');
             });
+        }
 
-            connection.start().then(function () {
-                console.log('SignalR connected');
+        console.log('Game boards initialized.');
+    }
 
-                const board = document.querySelector('game-board');
-                board.addEventListener('cellClick', function (event) {
-                    const { x, y } = event.detail;
-                    console.log(`Cell clicked at (${x}, ${y})`);
-                    // Send move to the server
-                    connection.invoke("SendMove", "Player1", x, y)
-                        .catch(function (err) {
-                            console.error("Error sending move:", err);
-                        });
-                });
+    initializeChat() {
+        const sendButton = this.shadowRoot.getElementById('sendButton');
+        const messageInput = this.shadowRoot.getElementById('messageInput');
+        const messages = this.shadowRoot.getElementById('messages');
 
-                // Example of marking a ship on the own board
-                board.markShip(0, 0);
-                board.markShip(0, 1);
-                board.markShip(0, 2);
-            }).catch(function (err) {
-                console.error("Error starting SignalR connection:", err);
-            });
+        console.log('Initializing chat...');
+
+        sendButton.addEventListener('click', () => {
+            const message = messageInput.value;
+            if (message) {
+                const messageElement = document.createElement('div');
+                messageElement.textContent = message;
+                messages.appendChild(messageElement);
+                messageInput.value = '';
+                messages.scrollTop = messages.scrollHeight; // Auto-scroll to the bottom
+            }
         });
-    </script>
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendButton.click();
+            }
+        });
+
+        console.log('Chat initialized.');
+    }
+
+    setBoardState(boardState) {
+        console.log('Received board state:', boardState);
+
+        // Parse boardState if it's a JSON string
+        if (typeof boardState === 'string') {
+            try {
+                boardState = JSON.parse(boardState);
+            } catch (e) {
+                console.error('Error parsing board state JSON:', e);
+                return;
+            }
+        }
+
+        // Ensure boardState is a 2D array
+        if (!Array.isArray(boardState) || !Array.isArray(boardState[0])) {
+            console.error('Invalid board state format.');
+            return;
+        }
+
+        const yourBoard = this.shadowRoot.getElementById('yourBoard');
+        const cells = yourBoard.querySelectorAll('.cell');
+
+        for (let i = 0; i < cells.length; i++) {
+            const x = Math.floor(i / 10);
+            const y = i % 10;
+
+            // Ensure x and y are within bounds of boardState
+            if (x < boardState.length && y < boardState[x].length) {
+                if (boardState[x][y] === 1) { // Assuming 1 represents 'Ship' in the enum
+                    cells[i].classList.add('ship');
+                }
+            } else {
+                console.error('Coordinates out of bounds:', x, y);
+            }
+        }
+    }
 }
+
+customElements.define('game-board', GameBoard);
