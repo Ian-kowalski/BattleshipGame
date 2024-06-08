@@ -5,7 +5,7 @@
 namespace BattleshipGame.Data.Migrations
 {
     /// <inheritdoc />
-    public partial class Add_gameState_update2 : Migration
+    public partial class Initialize : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)

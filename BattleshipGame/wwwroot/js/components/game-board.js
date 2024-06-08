@@ -31,12 +31,14 @@ class GameBoard extends HTMLElement {
     }
 
     setPlayerInfo(playerId) {
+        console.log(`Setting player info: ${playerId}`);
         this.playerId = playerId;
     }
 
     initializeBoards() {
         if (this.boardsInitialized) return;
 
+        console.log('Initializing boards');
         const yourBoard = this.shadowRoot.getElementById('yourBoard');
         const trackingBoard = this.shadowRoot.getElementById('trackingBoard');
 
@@ -61,113 +63,102 @@ class GameBoard extends HTMLElement {
     }
 
     initializeChat() {
+        console.log('Initializing chat');
         const sendButton = this.shadowRoot.getElementById('sendButton');
         const messageInput = this.shadowRoot.getElementById('messageInput');
 
         sendButton.addEventListener('click', () => {
             const message = messageInput.value;
             if (message) {
-                this.connection.invoke("SendMessage", this.playerId, message);
+                console.log(`Sending message: ${message}`);
+                this.connection.invoke('SendMessage', this.playerId, message)
+                    .catch(err => console.error(err));
                 messageInput.value = '';
             }
         });
     }
 
+    setBoardState(boardState) {
+        console.log(`Setting board state:`, boardState);
+        const yourBoard = this.shadowRoot.getElementById('yourBoard');
+        const trackingBoard = this.shadowRoot.getElementById('trackingBoard');
+
+        const { PlayerBoard, TrackingBoard, CurrentTurnPlayerId } = boardState;
+
+        if (!PlayerBoard || !TrackingBoard) return;
+
+        [...yourBoard.children].forEach((cell, index) => {
+            const x = Math.floor(index / 10);
+            const y = index % 10;
+            const cellState = PlayerBoard[x][y];
+            cell.className = 'cell';
+            if (cellState === 1) cell.classList.add('ship');
+            if (cellState === 2) cell.classList.add('hit');
+            if (cellState === 3) cell.classList.add('miss');
+        });
+
+        [...trackingBoard.children].forEach((cell, index) => {
+            const x = Math.floor(index / 10);
+            const y = index % 10;
+            const cellState = TrackingBoard[x][y];
+            cell.className = 'cell trackingCell';
+            if (cellState === 2) cell.classList.add('hit');
+            if (cellState === 3) cell.classList.add('miss');
+        });
+
+        console.log(`Current Turn Player ID: ${CurrentTurnPlayerId}`);
+    }
+
     setupSignalR() {
+        console.log('Setting up SignalR');
         this.connection = new signalR.HubConnectionBuilder()
             .withUrl("/gameHub")
             .build();
 
-        this.connection.on("ReceiveMove", (user, x, y, hit) => {
-            this.displayMessage(user, `made a move at (${x}, ${y}) - Hit: ${hit}`);
-            this.updateBoard('trackingBoard', x, y, hit);
+        this.connection.start()
+            .then(() => console.log('Connected to SignalR'))
+            .catch(err => console.error(err));
+
+        this.connection.on('ReceiveMessage', (user, message) => {
+            const messagesDiv = this.shadowRoot.getElementById('messages');
+            const messageElement = document.createElement('div');
+            messageElement.textContent = `${user}: ${message}`;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
         });
 
-        this.connection.on("ReceiveMessage", (user, message) => {
-            this.displayMessage(user, message);
+        this.connection.on('ReceiveMove', (user, x, y) => {
+            console.log(`Received move: ${user} moved to (${x}, ${y})`);
+            // Handle the move, update the board
         });
 
-        this.connection.start().then(() => {
-            console.log('SignalR connected');
-        }).catch(err => {
-            console.error(err.toString());
+        this.connection.on('UpdateCurrentTurn', (currentTurnPlayerId) => {
+            console.log(`Updated current turn player ID: ${currentTurnPlayerId}`);
+            // Update the UI to show whose turn it is
+            const turnIndicator = this.shadowRoot.getElementById('turnIndicator');
+            if (currentTurnPlayerId === this.playerId) {
+                turnIndicator.textContent = "It's your turn!";
+            } else {
+                turnIndicator.textContent = "Waiting for opponent's move...";
+            }
         });
-    }
 
-    displayMessage(user, message) {
-        const messagesDiv = this.shadowRoot.getElementById('messages');
-        const messageElement = document.createElement('div');
-        messageElement.textContent = `${user}: ${message}`;
-        messagesDiv.appendChild(messageElement);
-    }
 
-    updateBoard(boardId, x, y, hit) {
-        const board = this.shadowRoot.getElementById(boardId);
-        const cellIndex = x * 10 + y;
-        const cell = board.querySelectorAll('.cell')[cellIndex];
+        this.connection.on('ReceiveGameState', (gameState) => {
+            console.log(`Received game state:`, gameState);
+            this.setBoardState(gameState);
+        });
 
-        if (hit) {
-            cell.classList.add('hit');
-        } else {
-            cell.classList.add('miss');
-        }
+        this.connection.on('PlayerJoined', (userId, playerCount) => {
+            console.log(`Player joined: ${userId} (Total: ${playerCount})`);
+            // Handle new player joining, possibly refresh the game state
+        });
     }
 
     makeMove(x, y) {
-        fetch('/Game/MakeMove', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'RequestVerificationToken': document.querySelector('input[name="__RequestVerificationToken"]').value
-            },
-            body: JSON.stringify({ x, y })
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.hit) {
-                    console.log(`Hit at (${x}, ${y})`);
-                } else {
-                    console.log(`Miss at (${x}, ${y})`);
-                }
-            })
-            .catch(error => {
-                console.error('Error making move:', error);
-            });
-    }
-
-    setBoardState(boardState) {
-        const { playerBoard, trackingBoard } = boardState;
-
-        this.updateBoardState('yourBoard', playerBoard);
-        this.updateBoardState('trackingBoard', trackingBoard);
-    }
-
-    updateBoardState(boardId, boardState) {
-        const boardElement = this.shadowRoot.getElementById(boardId);
-        const cells = boardElement.querySelectorAll('.cell');
-
-        for (let i = 0; i < cells.length; i++) {
-            const x = Math.floor(i / 10);
-            const y = i % 10;
-
-            if (boardState && boardState.length > x && boardState[x].length > y) {
-                cells[i].className = 'cell'; // Reset the cell classes
-
-                switch (boardState[x][y]) {
-                    case 1: // Ship
-                        if (boardId === 'yourBoard') {
-                            cells[i].classList.add('ship');
-                        }
-                        break;
-                    case 2: // Hit
-                        cells[i].classList.add('hit');
-                        break;
-                    case 3: // Miss
-                        cells[i].classList.add('miss');
-                        break;
-                }
-            }
-        }
+        console.log(`Making move at (${x}, ${y})`);
+        this.connection.invoke('SendMove', this.playerId, x, y)
+            .catch(err => console.error(err));
     }
 }
 

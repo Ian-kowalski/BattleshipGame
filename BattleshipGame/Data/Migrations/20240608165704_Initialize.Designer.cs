@@ -12,8 +12,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BattleshipGame.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20240608134733_Add_gameState_update.2")]
-    partial class Add_gameState_update2
+    [Migration("20240608165704_Initialize")]
+    partial class Initialize
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

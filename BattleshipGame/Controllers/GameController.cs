@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace BattleshipGame.Controllers
 {
-    [Authorize]
+    //[Authorize]
     public class GameController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -31,6 +31,8 @@ namespace BattleshipGame.Controllers
 
             GameBoard playerBoard;
             GameBoard trackingBoard;
+            string currentTurnPlayerId;
+
             if (gameState == null)
             {
                 var allGameStates = _context.GameStates.ToList();
@@ -73,9 +75,15 @@ namespace BattleshipGame.Controllers
                 };
             }
 
-            var viewModel = new GameBoardViewModel(playerBoard, trackingBoard);
+            currentTurnPlayerId = gameState.CurrentTurnPlayerId;
+
+            var viewModel = new GameBoardViewModel(playerBoard, trackingBoard, currentTurnPlayerId);
+            ViewBag.UserId = userId; // Pass the user ID to the view using ViewBag
             return View(viewModel);
         }
+
+
+
 
         [HttpPost]
         public async Task<IActionResult> MakeMove(int x, int y)
