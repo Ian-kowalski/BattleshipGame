@@ -1,16 +1,24 @@
-﻿using BattleshipGame.Models;
+﻿using BattleshipGame.Data;
+using BattleshipGame.Models;
 using Microsoft.AspNetCore.SignalR;
+using Newtonsoft.Json;
 using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace SignalRChat.Hubs
+namespace BattleshipGame.Hubs
 {
     public class GameHub : Hub
     {
         private static readonly ConcurrentDictionary<string, string> Users = new ConcurrentDictionary<string, string>();
         private static readonly ConcurrentQueue<string> PlayerQueue = new ConcurrentQueue<string>(new[] { "Player 1", "Player 2" });
         private static string CurrentTurnPlayerId;
+        private readonly ApplicationDbContext _context;
+
+        public GameHub(ApplicationDbContext context)
+        {
+            _context = context;
+        }
 
         public override async Task OnConnectedAsync()
         {
@@ -56,18 +64,7 @@ namespace SignalRChat.Hubs
             await base.OnDisconnectedAsync(exception);
         }
 
-        public async Task SendGameState(string userId, GameState gameState)
-        {
-            Console.WriteLine($"Sending game state to user {userId}");
-            await Clients.User(userId).SendAsync("ReceiveGameState", gameState);
-        }
-
-        public async Task SendMessage(string user, string message)
-        {
-            await Clients.All.SendAsync("ReceiveMessage", user, message);
-        }
-
-        public async Task SendMove(string user, int x, int y)
+        public async Task MakeMove(int x, int y)
         {
             if (Context.ConnectionId != CurrentTurnPlayerId)
             {
@@ -75,8 +72,46 @@ namespace SignalRChat.Hubs
                 return;
             }
 
-            await Clients.All.SendAsync("ReceiveMove", user, x, y);
-            CurrentTurnPlayerId = Users.Keys.FirstOrDefault(id => id != Context.ConnectionId);
+            var gameState = _context.GameStates.FirstOrDefault(g => g.PlayerId == Context.UserIdentifier);
+            if (gameState == null)
+            {
+                await Clients.Caller.SendAsync("ReceiveMessage", "System", "Game state not found.");
+                return;
+            }
+
+            var opponentGameState = _context.GameStates.FirstOrDefault(g => g.PlayerId != Context.UserIdentifier);
+            if (opponentGameState == null)
+            {
+                await Clients.Caller.SendAsync("ReceiveMessage", "System", "Opponent not found.");
+                return;
+            }
+
+            var opponentBoard = new GameBoard
+            {
+                Cells = JsonConvert.DeserializeObject<CellState[,]>(opponentGameState.PlayerBoard)
+            };
+
+            var cellState = opponentBoard.Cells[x, y];
+            bool hit = false;
+            if (cellState == CellState.Ship)
+            {
+                opponentBoard.Cells[x, y] = CellState.Hit;
+                hit = true;
+            }
+            else if (cellState == CellState.Empty)
+            {
+                opponentBoard.Cells[x, y] = CellState.Miss;
+            }
+
+            opponentGameState.PlayerBoard = JsonConvert.SerializeObject(opponentBoard.Cells);
+            gameState.CurrentTurnPlayerId = opponentGameState.PlayerId;
+
+            _context.SaveChanges();
+
+            CurrentTurnPlayerId = opponentGameState.PlayerId; // Update turn in SignalR
+
+            await Clients.All.SendAsync("ReceiveMove", Context.ConnectionId, x, y, hit);
+            await Clients.Client(opponentGameState.PlayerId).SendAsync("OpponentMove", x, y, hit);
             await Clients.All.SendAsync("UpdateCurrentTurn", CurrentTurnPlayerId);
         }
     }

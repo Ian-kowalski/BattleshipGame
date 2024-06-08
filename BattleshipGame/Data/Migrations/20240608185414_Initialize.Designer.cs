@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BattleshipGame.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20240608165704_Initialize")]
+    [Migration("20240608185414_Initialize")]
     partial class Initialize
     {
         /// <inheritdoc />

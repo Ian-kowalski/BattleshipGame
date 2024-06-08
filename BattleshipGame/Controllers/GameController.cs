@@ -5,8 +5,8 @@ using Microsoft.AspNetCore.Identity;
 using Newtonsoft.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
-using SignalRChat.Hubs;
 using System.Threading.Tasks;
+using BattleshipGame.Hubs;
 
 namespace BattleshipGame.Controllers
 {
@@ -27,6 +27,7 @@ namespace BattleshipGame.Controllers
         public async Task<IActionResult> Game()
         {
             var userId = _userManager.GetUserId(User);
+            var userName = User.Identity?.Name; // Fetch the username
             var gameState = _context.GameStates.FirstOrDefault(g => g.PlayerId == userId);
 
             GameBoard playerBoard;
@@ -51,12 +52,8 @@ namespace BattleshipGame.Controllers
                     PlayerId = userId,
                     PlayerBoard = JsonConvert.SerializeObject(playerBoard.Cells),
                     TrackingBoard = JsonConvert.SerializeObject(trackingBoard.Cells),
+                    CurrentTurnPlayerId = allGameStates.Count == 0 ? userId : allGameStates[0].PlayerId // Assign turn to first player if first to join
                 };
-
-                if (allGameStates.Count == 0)
-                {
-                    gameState.CurrentTurnPlayerId = userId; // First player to join gets the first turn
-                }
 
                 _context.GameStates.Add(gameState);
                 await _context.SaveChangesAsync();
@@ -79,11 +76,9 @@ namespace BattleshipGame.Controllers
 
             var viewModel = new GameBoardViewModel(playerBoard, trackingBoard, currentTurnPlayerId);
             ViewBag.UserId = userId; // Pass the user ID to the view using ViewBag
+            ViewBag.UserName = userName; // Pass the username to the view using ViewBag
             return View(viewModel);
         }
-
-
-
 
         [HttpPost]
         public async Task<IActionResult> MakeMove(int x, int y)

@@ -6,6 +6,7 @@ class GameBoard extends HTMLElement {
         this.setupSignalR();
         this.boardsInitialized = false;
         this.playerId = '';
+        this.userName = '';
     }
 
     render() {
@@ -30,9 +31,10 @@ class GameBoard extends HTMLElement {
         this.initializeChat();
     }
 
-    setPlayerInfo(playerId) {
-        console.log(`Setting player info: ${playerId}`);
+    setPlayerInfo(playerId, userName) {
+        console.log(`Setting player info: ${playerId}, ${userName}`);
         this.playerId = playerId;
+        this.userName = userName;
     }
 
     initializeBoards() {
@@ -142,7 +144,6 @@ class GameBoard extends HTMLElement {
                 turnIndicator.textContent = "Waiting for opponent's move...";
             }
         });
-
 
         this.connection.on('ReceiveGameState', (gameState) => {
             console.log(`Received game state:`, gameState);

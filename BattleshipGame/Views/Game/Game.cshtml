@@ -9,20 +9,24 @@
     <script src="~/js/components/game-board.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-            const gameBoardElement = document.getElementById('gameBoard');
-            const playerId = '@ViewBag.UserId'; // Use ViewBag to get the user ID
-            const boardState = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(new
+            customElements.whenDefined('game-board').then(() => {
+                const gameBoardElement = document.getElementById('gameBoard');
+                const playerId = '@ViewBag.UserId'; // Use ViewBag to get the user ID
+                const userName = '@ViewBag.UserName'; // Use ViewBag to get the user name
+                const boardState = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(new
             {
                 PlayerBoard = Model.PlayerBoard,
                 TrackingBoard = Model.TrackingBoard,
                 CurrentTurnPlayerId = Model.CurrentTurnPlayerId
             }));
 
-            console.log('Player ID:', playerId);
-            console.log('Board State:', boardState);
+                console.log('Player ID:', playerId);
+                console.log('User Name:', userName);
+                console.log('Board State:', boardState);
 
-            gameBoardElement.setPlayerInfo(playerId);
-            gameBoardElement.setBoardState(boardState);
+                gameBoardElement.setPlayerInfo(playerId, userName);
+                gameBoardElement.setBoardState(boardState);
+            });
         });
     </script>
 }

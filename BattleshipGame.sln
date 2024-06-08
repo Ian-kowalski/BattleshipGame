@@ -5,7 +5,12 @@ VisualStudioVersion = 17.8.34525.116
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BattleshipGame", "BattleshipGame\BattleshipGame.csproj", "{16AE84DF-07AC-4213-9D34-9948F59D5E5C}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BattleshipTest", "BattleshipTest\BattleshipTest.csproj", "{E2EECCC5-8E87-4E3B-B49B-72F4DCE1176B}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "BattleshipTest", "BattleshipTest\BattleshipTest.csproj", "{E2EECCC5-8E87-4E3B-B49B-72F4DCE1176B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{4C8F2556-3361-4C0A-B653-AD51EDA6259B}"
+	ProjectSection(SolutionItems) = preProject
+		Chatgpt.txt = Chatgpt.txt
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
