@@ -61,3 +61,11 @@
 .ship {
     background-color: lightslategray;
 }
+
+.hit {
+    background-color: red;
+}
+
+.miss {
+    background-color: lightgray;
+}

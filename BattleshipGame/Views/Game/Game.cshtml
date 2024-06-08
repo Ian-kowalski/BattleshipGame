@@ -7,14 +7,17 @@
 @section Scripts {
     <script src="~/js/signalr/dist/browser/signalr.js"></script>
     <script src="~/js/components/game-board.js"></script>
-    <script src="~/js/game/game.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", function () {
             const gameBoardElement = document.getElementById('gameBoard');
-            const boardState = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(Model.Cells));
-            gameBoardElement.setBoardState(JSON.stringify(boardState));
+            const playerId = '@User.Identity.Name';
+            const boardState = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(new
+            {
+                PlayerBoard = Model.PlayerBoard,
+                TrackingBoard = Model.TrackingBoard
+            }));
+            gameBoardElement.setPlayerInfo(playerId);
+            gameBoardElement.setBoardState(boardState);
         });
     </script>
 }
-
-

@@ -3,12 +3,14 @@
     public class GameBoardViewModel
     {
         public int BoardSize { get; set; }
-        public CellState[,] Cells { get; set; }
+        public CellState[,] PlayerBoard { get; set; }
+        public CellState[,] TrackingBoard { get; set; }
 
-        public GameBoardViewModel(GameBoard gameBoard)
+        public GameBoardViewModel(GameBoard playerBoard, GameBoard trackingBoard)
         {
             BoardSize = GameBoard.BoardSize;
-            Cells = gameBoard.Cells;
+            PlayerBoard = playerBoard.Cells;
+            TrackingBoard = trackingBoard.Cells;
         }
     }
 }

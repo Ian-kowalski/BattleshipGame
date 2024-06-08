@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+﻿using BattleshipGame.Models;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 namespace BattleshipGame.Data
@@ -9,5 +10,6 @@ namespace BattleshipGame.Data
             : base(options)
         {
         }
+        public DbSet<GameState> GameStates { get; set; }
     }
 }
