@@ -1,3 +1,6 @@
+@import"nav.css";
+@import "svg.css";
+
 html {
   font-size: 14px;
 }
@@ -17,6 +20,75 @@ html {
   min-height: 100%;
 }
 
+main {
+    margin: 0;
+    margin-bottom: 5rem;
+    padding: 1rem;
+    background: var(--bg-main);
+    color: var(--text-primary);
+    display: flex;
+    flex-direction: column;
+    align-content: center;
+}
+
+/* Large screens */
+@media only screen and (min-width: 600px) {
+    main {
+        margin-bottom: 0;
+        margin-left: 5rem;
+        flex-direction: row;
+        height: 100svh;
+    }
+}
+
 body {
-  margin-bottom: 60px;
+    color: var(--text-primary);
+    background-color: var(--bg-main);
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    margin-bottom: 60px;
+}
+
+body::-webkit-scrollbar {
+    width: 0.5rem;
+}
+
+body::-webkit-scrollbar-track {
+    background: var(--bg-primary)
+}
+
+body::-webkit-scrollbar-thumb {
+    background: var(--ac-primary)
+}
+
+:root {
+    font-size: 16px;
+    font-family: 'Open Sans';
+    --bg-main: #ffffff;
+    --text-primary: #1f1f1f;
+    --text-secondary: #000000;
+    --bg-primary: #cecece;
+    --bg-secondary: #e4e4e4;
+    --ac-primary: #50ed81;
+    --ac-primary-hover: #3dac7c;
+    --ac-secondary: #0ed87d;
+    --ac-secondary-hover: #08ae74;
+    --text-ac-primary: #292525;
+    --transition-speed: 600ms;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --bg-main: #23232e;
+        --text-primary: #b6b6b6;
+        --text-secondary: #ececec;
+        --bg-primary: #363643;
+        --bg-secondary: #2e2e36;
+        --ac-primary: #FF00EE;
+        --ac-primary-hover: #810979;
+        --ac-secondary: #ef71e6;
+        --ac-secondary-hover: #743970;
+        --text-ac-primary: #292525;
+    }
 }

@@ -1,0 +1,177 @@
+﻿@import "svg.css";
+
+#sendButton {
+    display: flex;
+    border: none;
+    outline: none;
+    background-color: var(--bg-primary);
+    align-items: center;
+    justify-content: center;
+    color: var(--text-secondary);
+    height: 40px;
+    aspect-ratio: 2/1;
+    border-radius: 40px;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+    transition: all 0.5s;
+}
+
+    #sendButton.active {
+        flex-direction: column;
+        aspect-ratio: 1/1;
+        gap: 0;
+    }
+
+        #sendButton.active.sent {
+            flex-direction: row;
+            aspect-ratio: 2/1;
+            transition-delay: 1s;
+        }
+
+        #sendButton.active.notSent {
+            flex-direction: row;
+            aspect-ratio: 2/1;
+            transition-delay: 1s;
+        }
+
+    #sendButton .text {
+        width: fit-content;
+        transition: all 0.5s;
+        overflow: hidden;
+        text-align: left;
+    }
+
+    #sendButton.active .text {
+        width: 0;
+    }
+
+    #sendButton.active.sent .text {
+        width: fit-content;
+        transition-delay: 1s;
+    }
+
+    #sendButton.active.notSent .text {
+        width: fit-content;
+        transition-delay: 1s;
+    }
+
+    #sendButton .sendIcon {
+        height: 50%;
+        width: fit-content;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.5s;
+    }
+
+    #sendButton.active .sendIcon {
+        height: 250%;
+    }
+
+    #sendButton.active.sent .sendIcon {
+        display: none;
+    }
+
+    #sendButton.active.notSent .sendIcon {
+        display: none;
+    }
+
+    #sendButton .sendIcon svg {
+        height: 100%;
+    }
+
+    #sendButton .smoke {
+        height: 50%;
+        display: none;
+        width: 10px;
+        justify-content: space-between;
+        align-items: stretch;
+        aspect-ratio: 1/2;
+        opacity: 0;
+        visibility: hidden;
+    }
+
+    #sendButton.active .smoke {
+        display: flex;
+        opacity: 1;
+        visibility: visible;
+    }
+
+    #sendButton.active.sent .smoke {
+        display: none;
+        opacity: 0;
+        visibility: hidden;
+    }
+
+    #sendButton.active.notSent .smoke {
+        display: none;
+        opacity: 0;
+        visibility: hidden;
+    }
+
+    #sendButton .smoke > span {
+        display: block;
+        width: 1px;
+        height: 200%;
+        background-color: var(--text-secondary);
+        animation: smoke 0.3s linear infinite;
+    }
+
+        #sendButton .smoke > span:nth-child(2) {
+            animation-delay: 0.1s;
+        }
+
+        #sendButton .smoke > span:nth-child(3) {
+            animation-delay: 0.2s;
+        }
+
+@keyframes smoke {
+    0% {
+        transform: translateY(-100%);
+    }
+
+    100% {
+        transform: translateY(100%);
+    }
+}
+
+#sendButton .check {
+    height: 50%;
+    width: fit-content;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.5s;
+    clip-path: polygon(0% 0%, 0% 0%, 0% 100%, 0% 100%);
+    transition: all 0.5s, right 0.5s 1s;
+}
+
+    #sendButton .check svg {
+        height: 100%;
+    }
+
+#sendButton.sent .check {
+    display: flex;
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+}
+
+#sendButton .cross {
+    height: 50%;
+    width: fit-content;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.5s;
+    clip-path: polygon(0% 0%, 0% 0%, 0% 100%, 0% 100%);
+    transition: all 0.5s, right 0.5s 1s;
+}
+
+    #sendButton .cross svg {
+        height: 100%;
+    }
+
+#sendButton.notSent .cross {
+    display: flex;
+    clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+}

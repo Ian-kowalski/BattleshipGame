@@ -1,8 +1,11 @@
 ﻿@model BattleshipGame.Models.GameBoardViewModel
 
-<h2>Battleship Game</h2>
 
+
+@* <button id="startGameButton" disabled>Start Game</button> *@
+<h2>Battleship Game</h2>
 <game-board id="gameBoard"></game-board>
+
 
 @section Scripts {
     <script src="~/js/signalr/dist/browser/signalr.js"></script>
@@ -11,8 +14,8 @@
         document.addEventListener("DOMContentLoaded", function () {
             customElements.whenDefined('game-board').then(() => {
                 const gameBoardElement = document.getElementById('gameBoard');
-                const playerId = '@ViewBag.UserId'; // Use ViewBag to get the user ID
-                const userName = '@ViewBag.UserName'; // Use ViewBag to get the user name
+                const startGameButton = document.getElementById('startGameButton');
+                const userName = '@ViewBag.UserName';
                 const boardState = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(new
             {
                 PlayerBoard = Model.PlayerBoard,
@@ -20,12 +23,19 @@
                 CurrentTurnPlayerId = Model.CurrentTurnPlayerId
             }));
 
-                console.log('Player ID:', playerId);
-                console.log('User Name:', userName);
-                console.log('Board State:', boardState);
-
-                gameBoardElement.setPlayerInfo(playerId, userName);
+                gameBoardElement.setPlayerInfo(userName);
                 gameBoardElement.setBoardState(boardState);
+
+                startGameButton.addEventListener('click', function () {
+                    fetch('/Game/StartGame', { method: 'POST' })
+                        .then(response => {
+                            if (response.ok) {
+                                console.log('Game started successfully');
+                            } else {
+                                console.error('Failed to start game');
+                            }
+                        });
+                });
             });
         });
     </script>

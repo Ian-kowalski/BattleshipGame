@@ -5,7 +5,6 @@ class GameBoard extends HTMLElement {
         this.render();
         this.setupSignalR();
         this.boardsInitialized = false;
-        this.playerId = '';
         this.userName = '';
     }
 
@@ -31,9 +30,8 @@ class GameBoard extends HTMLElement {
         this.initializeChat();
     }
 
-    setPlayerInfo(playerId, userName) {
-        console.log(`Setting player info: ${playerId}, ${userName}`);
-        this.playerId = playerId;
+    setPlayerInfo(userName) {
+        console.log(`Setting player info: ${userName}`);
         this.userName = userName;
     }
 
@@ -65,20 +63,25 @@ class GameBoard extends HTMLElement {
     }
 
     initializeChat() {
-        console.log('Initializing chat');
         const sendButton = this.shadowRoot.getElementById('sendButton');
         const messageInput = this.shadowRoot.getElementById('messageInput');
 
         sendButton.addEventListener('click', () => {
-            const message = messageInput.value;
+            const message = messageInput.value.trim();
             if (message) {
-                console.log(`Sending message: ${message}`);
-                this.connection.invoke('SendMessage', this.playerId, message)
+                this.connection.invoke('SendMessage', this.userName, message)
                     .catch(err => console.error(err));
                 messageInput.value = '';
             }
         });
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendButton.click();
+            }
+        });
     }
+
 
     setBoardState(boardState) {
         console.log(`Setting board state:`, boardState);
@@ -118,7 +121,11 @@ class GameBoard extends HTMLElement {
             .build();
 
         this.connection.start()
-            .then(() => console.log('Connected to SignalR'))
+            .then(() => {
+                console.log('Connected to SignalR');
+                this.connection.invoke('RegisterPlayer', this.userName)
+                    .catch(err => console.error(err));
+            })
             .catch(err => console.error(err));
 
         this.connection.on('ReceiveMessage', (user, message) => {
@@ -129,36 +136,29 @@ class GameBoard extends HTMLElement {
             messagesDiv.scrollTop = messagesDiv.scrollHeight;
         });
 
-        this.connection.on('ReceiveMove', (user, x, y) => {
-            console.log(`Received move: ${user} moved to (${x}, ${y})`);
-            // Handle the move, update the board
+        this.connection.on('PlayerJoined', (userId, playerCount) => {
+            console.log(`Player joined: ${userId} (Total: ${playerCount})`);
+            if (playerCount === 2) {
+                const startGameButton = this.shadowRoot.getElementById('startGameButton');
+                startGameButton.disabled = false; // Enable start game button when the second player joins
+            }
         });
 
-        this.connection.on('UpdateCurrentTurn', (currentTurnPlayerId) => {
-            console.log(`Updated current turn player ID: ${currentTurnPlayerId}`);
-            // Update the UI to show whose turn it is
-            const turnIndicator = this.shadowRoot.getElementById('turnIndicator');
-            if (currentTurnPlayerId === this.playerId) {
-                turnIndicator.textContent = "It's your turn!";
-            } else {
-                turnIndicator.textContent = "Waiting for opponent's move...";
-            }
+        this.connection.on('ReceiveMove', (user, x, y) => {
+            console.log(`Received move: ${user} shot at (${x}, ${y})`);
+            // Handle the move, update the board
         });
 
         this.connection.on('ReceiveGameState', (gameState) => {
             console.log(`Received game state:`, gameState);
             this.setBoardState(gameState);
         });
-
-        this.connection.on('PlayerJoined', (userId, playerCount) => {
-            console.log(`Player joined: ${userId} (Total: ${playerCount})`);
-            // Handle new player joining, possibly refresh the game state
-        });
     }
+
 
     makeMove(x, y) {
         console.log(`Making move at (${x}, ${y})`);
-        this.connection.invoke('SendMove', this.playerId, x, y)
+        this.connection.invoke('SendMove', this.userName, x, y)
             .catch(err => console.error(err));
     }
 }

@@ -2,9 +2,69 @@
     ViewData["Title"] = "Home Page";
 }
 
-<div class="text-center">
-    <h1 class="display-4">Welcome</h1>
-    <p>Learn about <a href="https://learn.microsoft.com/aspnet/core">building Web apps with ASP.NET Core</a>.</p>
+
+<div class="personalia">
+    <partial name="_personalia" />
 </div>
 
+<section class="profile">
+    <h2 class="profile-__title">
+        profile</h3>
+        <section class="profile-content">
 
+            <introduction class="profile-content__category">
+                <h3 class="profile-content__category-title">introduction</h3>
+                <p class="profile-content__description">
+                    Student ICT aan het Windesheim momenteel in mijn tweede jaar
+                </p>
+                <hr>
+            </introduction>
+
+            <skils class="profile-content__category">
+                <h3 class="profile-content__category-title">skils</h3>
+                <p class="profile-content__description">
+                    <ul class="profile-content__skillList">
+                        <li class="skill-item"> c# </li>
+                        <li class="skill-item"> java </li>
+                        <li class="skill-item"> html </li>
+                        <li class="skill-item"> css </li>
+                    </ul>
+                </p>
+                <hr>
+            </skils>
+
+
+            <education class="profile-content__category">
+                <h3 class="profile-content__category-title">Opleidingen</h3>
+
+                <div class="profile-content__element">
+                    <div class="profile-content__element-header">
+                        <p class="profile-content__title">ICT</p>
+                        <p class="profile-content__period">sep 2022 - nu</p>
+                    </div>
+                    <p class="profile-content__institute">Windesheim, Zwolle</p>
+                </div>
+
+
+                <div class="profile-content__element">
+                    <div class="profile-content__element-header">
+                        <p class="profile-content__title">Havo</p>
+                        <p class="profile-content__period">nov 2016 - mei 2020</p>
+                    </div>
+                    <p class="profile-content__institute">RSG Tromp meesters, Steenwijk</p>
+                </div>
+
+                <div class="profile-content__element">
+                    <div class="profile-content__element-header">
+                        <p class="profile-content__title">Mechatronica</p>
+                        <p class="profile-content__period">nov 2020 - mei 2022</p>
+                    </div>
+                    <p class="profile-content__institute">saxion, Enschede</p>
+                </div>
+
+
+                <hr>
+            </education>
+        </section>
+</section>
+<link rel="stylesheet" href="~/css/cv.css" asp-append-version="true" />

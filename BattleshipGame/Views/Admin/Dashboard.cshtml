@@ -1,0 +1,28 @@
+﻿<!-- Views/Admin/Dashboard.cshtml -->
+@model List<Microsoft.AspNetCore.Identity.IdentityUser> // Specify the model type
+
+@{
+    ViewData["Title"] = "Admin Dashboard";
+}
+
+<h2>Admin Dashboard</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>Username</th>
+            <th>TwoFactorEnabled</th>
+            <!-- Add more columns as needed -->
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var user in Model)
+        {
+            <tr>
+                <td>@user.UserName</td>
+                <td>@user.TwoFactorEnabled</td>
+                <!-- Add more columns as needed -->
+            </tr>
+        }
+    </tbody>
+</table>

@@ -1,0 +1,915 @@
+batelship game (read al bevore ansering)
+## context:=============================================================================================================
+program.cs:-------------------------------------------------------------------------------------------------------------
+using BattleshipGame.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+
+using BattleshipGame.Hubs;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+    options.UseSqlServer(connectionString));
+builder.Services.AddDatabaseDeveloperPageExceptionFilter();
+
+builder.Services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
+    .AddEntityFrameworkStores<ApplicationDbContext>();
+builder.Services.AddControllersWithViews();
+
+builder.Services.AddSignalR();
+
+var app = builder.Build();
+
+// Configure the HTTP request pipeline.
+if (app.Environment.IsDevelopment())
+{
+    app.UseMigrationsEndPoint();
+}
+else
+{
+    app.UseExceptionHandler("/Home/Error");
+    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
+    app.UseHsts();
+}
+
+app.UseHttpsRedirection();
+app.UseStaticFiles();
+
+app.UseRouting();
+
+app.UseAuthorization();
+
+app.MapControllerRoute(
+    name: "default",
+    pattern: "{controller=Home}/{action=Index}/{id?}");
+app.MapRazorPages();
+
+app.MapHub<GameHub>("/gameHub");
+
+app.Run();
+Views/Game/Game.cshtml:-------------------------------------------------------------------------------------------------
+@model BattleshipGame.Models.GameBoardViewModel
+
+<h2>Battleship Game</h2>
+
+<button id="startGameButton" disabled>Start Game</button>
+
+<game-board id="gameBoard"></game-board>
+
+@section Scripts {
+    <script src="~/js/signalr/dist/browser/signalr.js"></script>
+    <script src="~/js/components/game-board.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            customElements.whenDefined('game-board').then(() => {
+                const gameBoardElement = document.getElementById('gameBoard');
+                const startGameButton = document.getElementById('startGameButton');
+                const userName = '@ViewBag.UserName';
+                const boardState = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(new
+            {
+                PlayerBoard = Model.PlayerBoard,
+                TrackingBoard = Model.TrackingBoard,
+                CurrentTurnPlayerId = Model.CurrentTurnPlayerId
+            }));
+
+                gameBoardElement.setPlayerInfo(userName);
+                gameBoardElement.setBoardState(boardState);
+
+                startGameButton.addEventListener('click', function () {
+                    fetch('/Game/StartGame', { method: 'POST' })
+                        .then(response => {
+                            if (response.ok) {
+                                console.log('Game started successfully');
+                            } else {
+                                console.error('Failed to start game');
+                            }
+                        });
+                });
+            });
+        });
+    </script>
+}
+Controlers/GameController.cs:-------------------------------------------------------------------------------------------
+using Microsoft.AspNetCore.Mvc;
+using BattleshipGame.Models;
+using BattleshipGame.Data;
+using Microsoft.AspNetCore.Identity;
+using Newtonsoft.Json;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.SignalR;
+using System.Threading.Tasks;
+using BattleshipGame.Hubs;
+
+namespace BattleshipGame.Controllers
+{
+    //[Authorize]
+    public class GameController : Controller
+    {
+        private readonly ApplicationDbContext _context;
+        private readonly UserManager<IdentityUser> _userManager;
+        private readonly IHubContext<GameHub> _hubContext;
+
+        public GameController(ApplicationDbContext context, UserManager<IdentityUser> userManager, IHubContext<GameHub> hubContext)
+        {
+            _context = context;
+            _userManager = userManager;
+            _hubContext = hubContext;
+        }
+
+        public async Task<IActionResult> Game()
+        {
+            var userName = User.Identity?.Name; // Fetch the username
+            var gameState = _context.GameStates.FirstOrDefault(g => g.PlayerId == userName);
+
+            GameBoard playerBoard;
+            GameBoard trackingBoard;
+            string currentTurnPlayerId;
+
+            if (gameState == null)
+            {
+                var allGameStates = _context.GameStates.ToList();
+                if (allGameStates.Count >= 2)
+                {
+                    return BadRequest("The game is full. Only two players are allowed.");
+                }
+
+                playerBoard = new GameBoard();
+                trackingBoard = new GameBoard();
+
+                ShipGenerator.GenerateShips(playerBoard);
+
+                gameState = new GameState
+                {
+                    PlayerId = userName,
+                    PlayerBoard = JsonConvert.SerializeObject(playerBoard.Cells),
+                    TrackingBoard = JsonConvert.SerializeObject(trackingBoard.Cells),
+                    CurrentTurnPlayerId = allGameStates.Count == 0 ? userName : allGameStates[0].PlayerId // Assign turn to first player if first to join
+                };
+
+                _context.GameStates.Add(gameState);
+                await _context.SaveChangesAsync();
+
+                await _hubContext.Clients.All.SendAsync("PlayerJoined", userName, allGameStates.Count + 1);
+            }
+            else
+            {
+                playerBoard = new GameBoard
+                {
+                    Cells = JsonConvert.DeserializeObject<CellState[,]>(gameState.PlayerBoard)
+                };
+                trackingBoard = new GameBoard
+                {
+                    Cells = JsonConvert.DeserializeObject<CellState[,]>(gameState.TrackingBoard)
+                };
+            }
+
+            currentTurnPlayerId = gameState.CurrentTurnPlayerId;
+
+            var viewModel = new GameBoardViewModel(playerBoard, trackingBoard, currentTurnPlayerId);
+            ViewBag.UserName = userName; // Pass the username to the view using ViewBag
+            return View(viewModel);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> StartGame()
+        {
+            var userName = User.Identity?.Name; // Fetch the username
+            var gameState = _context.GameStates.FirstOrDefault(g => g.PlayerId == userName);
+
+            if (gameState == null)
+            {
+                return BadRequest("Game state not found.");
+            }
+
+            var opponentGameState = _context.GameStates.FirstOrDefault(g => g.PlayerId != userName);
+            if (opponentGameState == null)
+            {
+                return BadRequest("Opponent not found.");
+            }
+
+            // Determine starting player using coin flip
+            var random = new Random();
+            var startingPlayerId = random.Next(2) == 0 ? userName : opponentGameState.PlayerId;
+
+            gameState.CurrentTurnPlayerId = startingPlayerId;
+            opponentGameState.CurrentTurnPlayerId = startingPlayerId;
+
+            await _context.SaveChangesAsync();
+
+            await _hubContext.Clients.All.SendAsync("UpdateCurrentTurn", startingPlayerId);
+
+            return Ok();
+        }
+
+
+        [HttpPost]
+        public async Task<IActionResult> MakeMove(int x, int y)
+        {
+            var userName = User.Identity?.Name; // Fetch the username
+            var gameState = _context.GameStates.FirstOrDefault(g => g.PlayerId == userName);
+
+            if (gameState == null)
+            {
+                return BadRequest("Game state not found.");
+            }
+
+            var playerBoard = new GameBoard
+            {
+                Cells = JsonConvert.DeserializeObject<CellState[,]>(gameState.PlayerBoard)
+            };
+            var trackingBoard = new GameBoard
+            {
+                Cells = JsonConvert.DeserializeObject<CellState[,]>(gameState.TrackingBoard)
+            };
+
+            if (gameState.CurrentTurnPlayerId != userName)
+            {
+                return BadRequest("It's not your turn.");
+            }
+
+            var opponentGameState = _context.GameStates.FirstOrDefault(g => g.PlayerId != userName);
+            if (opponentGameState == null)
+            {
+                return BadRequest("Opponent not found.");
+            }
+
+            var opponentBoard = new GameBoard
+            {
+                Cells = JsonConvert.DeserializeObject<CellState[,]>(opponentGameState.PlayerBoard)
+            };
+
+            var cellState = opponentBoard.Cells[x, y];
+            bool hit = false;
+            if (cellState == CellState.Ship)
+            {
+                opponentBoard.Cells[x, y] = CellState.Hit;
+                hit = true;
+            }
+            else if (cellState == CellState.Empty)
+            {
+                opponentBoard.Cells[x, y] = CellState.Miss;
+            }
+
+            opponentGameState.PlayerBoard = JsonConvert.SerializeObject(opponentBoard.Cells);
+
+            trackingBoard.Cells[x, y] = hit ? CellState.Hit : CellState.Miss;
+            gameState.TrackingBoard = JsonConvert.SerializeObject(trackingBoard.Cells);
+
+            gameState.CurrentTurnPlayerId = opponentGameState.PlayerId;
+
+            _context.SaveChanges();
+
+            await _hubContext.Clients.All.SendAsync("ReceiveMove", userName, x, y, hit);
+            await _hubContext.Clients.User(opponentGameState.PlayerId).SendAsync("OpponentMove", x, y, hit);
+
+            return Json(new { hit });
+        }
+    }
+}
+Data/ApplicationDbContext.cs:-------------------------------------------------------------------------------------------
+using BattleshipGame.Models;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
+
+namespace BattleshipGame.Data
+{
+    public class ApplicationDbContext : IdentityDbContext
+    {
+        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+            : base(options)
+        {
+        }
+        public DbSet<GameState> GameStates { get; set; }
+    }
+}
+wwwroot/js/components/game-board.js:------------------------------------------------------------------------------------
+class GameBoard extends HTMLElement {
+    constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+        this.render();
+        this.setupSignalR();
+        this.boardsInitialized = false;
+        this.userName = '';
+    }
+
+    render() {
+        this.shadowRoot.innerHTML = `
+            <link rel="stylesheet" href="/css/game-board.css">
+            <div id="container">
+                <div id="chat">
+                    <div id="messages"></div>
+                    <div id="chatInput">
+                        <input type="text" id="messageInput" placeholder="Type a message...">
+                        <button id="sendButton">Send</button>
+                    </div>
+                </div>
+                <div id="boards">
+                    <div id="yourBoard" class="board"></div>
+                    <div id="trackingBoard" class="board"></div>
+                </div>
+            </div>
+        `;
+
+        this.initializeBoards();
+        this.initializeChat();
+    }
+
+    setPlayerInfo(userName) {
+        console.log(`Setting player info: ${userName}`);
+        this.userName = userName;
+    }
+
+    initializeBoards() {
+        if (this.boardsInitialized) return;
+
+        console.log('Initializing boards');
+        const yourBoard = this.shadowRoot.getElementById('yourBoard');
+        const trackingBoard = this.shadowRoot.getElementById('trackingBoard');
+
+        for (let i = 0; i < 100; i++) {
+            const yourCell = document.createElement('div');
+            yourCell.className = 'cell';
+            yourBoard.appendChild(yourCell);
+
+            const trackingCell = document.createElement('div');
+            trackingCell.className = 'cell';
+            trackingCell.classList.add('trackingCell');
+            trackingBoard.appendChild(trackingCell);
+
+            trackingCell.addEventListener('click', () => {
+                const x = Math.floor(i / 10);
+                const y = i % 10;
+                this.makeMove(x, y);
+            });
+        }
+
+        this.boardsInitialized = true;
+    }
+
+    initializeChat() {
+        console.log('Initializing chat');
+        const sendButton = this.shadowRoot.getElementById('sendButton');
+        const messageInput = this.shadowRoot.getElementById('messageInput');
+
+        sendButton.addEventListener('click', () => {
+            const message = messageInput.value;
+            if (message) {
+                console.log(`Sending message: ${message}`);
+                this.connection.invoke('SendMessage', this.userName, message)
+                    .catch(err => console.error(err));
+                messageInput.value = '';
+            }
+        });
+    }
+
+    setBoardState(boardState) {
+        console.log(`Setting board state:`, boardState);
+        const yourBoard = this.shadowRoot.getElementById('yourBoard');
+        const trackingBoard = this.shadowRoot.getElementById('trackingBoard');
+
+        const { PlayerBoard, TrackingBoard, CurrentTurnPlayerId } = boardState;
+
+        if (!PlayerBoard || !TrackingBoard) return;
+
+        [...yourBoard.children].forEach((cell, index) => {
+            const x = Math.floor(index / 10);
+            const y = index % 10;
+            const cellState = PlayerBoard[x][y];
+            cell.className = 'cell';
+            if (cellState === 1) cell.classList.add('ship');
+            if (cellState === 2) cell.classList.add('hit');
+            if (cellState === 3) cell.classList.add('miss');
+        });
+
+        [...trackingBoard.children].forEach((cell, index) => {
+            const x = Math.floor(index / 10);
+            const y = index % 10;
+            const cellState = TrackingBoard[x][y];
+            cell.className = 'cell trackingCell';
+            if (cellState === 2) cell.classList.add('hit');
+            if (cellState === 3) cell.classList.add('miss');
+        });
+
+        console.log(`Current Turn Player ID: ${CurrentTurnPlayerId}`);
+    }
+
+    setupSignalR() {
+        console.log('Setting up SignalR');
+        this.connection = new signalR.HubConnectionBuilder()
+            .withUrl("/gameHub")
+            .build();
+
+        this.connection.start()
+            .then(() => {
+                console.log('Connected to SignalR');
+                this.connection.invoke('RegisterPlayer', this.userName)
+                    .catch(err => console.error(err));
+            })
+            .catch(err => console.error(err));
+
+        this.connection.on('ReceiveMessage', (user, message) => {
+            const messagesDiv = this.shadowRoot.getElementById('messages');
+            const messageElement = document.createElement('div');
+            messageElement.textContent = `${user}: ${message}`;
+            messagesDiv.appendChild(messageElement);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        });
+
+        this.connection.on('PlayerJoined', (userId, playerCount) => {
+            console.log(`Player joined: ${userId} (Total: ${playerCount})`);
+            if (playerCount === 2) {
+                const startGameButton = this.shadowRoot.getElementById('startGameButton');
+                startGameButton.disabled = false; // Enable start game button when the second player joins
+            }
+        });
+
+        this.connection.on('ReceiveMove', (user, x, y) => {
+            console.log(`Received move: ${user} shot at (${x}, ${y})`);
+            // Handle the move, update the board
+        });
+
+        this.connection.on('ReceiveGameState', (gameState) => {
+            console.log(`Received game state:`, gameState);
+            this.setBoardState(gameState);
+        });
+    }
+
+
+    makeMove(x, y) {
+        console.log(`Making move at (${x}, ${y})`);
+        this.connection.invoke('SendMove', this.userName, x, y)
+            .catch(err => console.error(err));
+    }
+}
+
+customElements.define('game-board', GameBoard);
+wwwroot/css/game-board.css:---------------------------------------------------------------------------------------------
+#container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#chat {
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 20px;
+}
+
+#messages {
+    border: 1px solid #ccc;
+    height: 200px;
+    overflow-y: auto;
+    padding: 10px;
+    background-color: #f9f9f9;
+}
+
+#chatInput {
+    display: flex;
+    margin-top: 10px;
+}
+
+#messageInput {
+    flex-grow: 1;
+    padding: 5px;
+}
+
+#sendButton {
+    padding: 5px 10px;
+}
+
+#boards {
+    display: flex;
+    justify-content: space-around;
+    width: 100%;
+}
+
+.board {
+    display: grid;
+    grid-template-columns: repeat(10, 30px);
+    grid-template-rows: repeat(10, 30px);
+    gap: 2px;
+}
+
+.cell {
+    width: 30px;
+    height: 30px;
+    border: 1px solid #000;
+    background-color: #fff;
+    position: relative;
+}
+
+#trackingBoard .cell:hover {
+    background-color: lightblue;
+}
+
+.ship {
+    background-color: lightslategray;
+}
+
+.hit {
+    background-color: red;
+}
+
+.miss {
+    background-color: lightgray;
+}
+models/GameState.cs:----------------------------------------------------------------------------------------------------
+namespace BattleshipGame.Models
+{
+    public class GameState
+    {
+        public int Id { get; set; }
+        public string PlayerId { get; set; }
+        public string PlayerBoard { get; set; } // JSON representation of the player's game board
+        public string TrackingBoard { get; set; } // JSON representation of the tracking board
+        public string? CurrentTurnPlayerId { get; set; }
+
+    }
+}
+models/GameBoard.cs:----------------------------------------------------------------------------------------------------
+namespace BattleshipGame.Models
+{
+    public class GameBoard
+    {
+        public const int BoardSize = 10;
+        public CellState[,] Cells { get; set; }
+
+
+        public GameBoard()
+        {
+            Cells = new CellState[BoardSize, BoardSize];
+            for (int i = 0; i < BoardSize; i++)
+            {
+                for (int j = 0; j < BoardSize; j++)
+                {
+                    Cells[i, j] = CellState.Empty;
+                }
+            }
+        }
+
+        public bool IsHit(int x, int y)
+        {
+            if (Cells[x, y] == CellState.Ship)
+            {
+                Cells[x, y] = CellState.Hit;
+                return true;
+            }
+
+            Cells[x, y] = CellState.Miss;
+            return false;
+        }
+    }
+
+    public enum CellState
+    {
+        Empty,
+        Ship,
+        Hit,
+        Miss
+    }
+}
+models/GameBoardViewModel.cs:-------------------------------------------------------------------------------------------
+namespace BattleshipGame.Models;
+
+public class GameBoardViewModel
+{
+    public int BoardSize { get; set; }
+    public CellState[,] PlayerBoard { get; set; }
+    public CellState[,] TrackingBoard { get; set; }
+    public string CurrentTurnPlayerId { get; set; }
+
+    public GameBoardViewModel(GameBoard playerBoard, GameBoard trackingBoard, string currentTurnPlayerId)
+    {
+        BoardSize = GameBoard.BoardSize;
+        PlayerBoard = playerBoard.Cells;
+        TrackingBoard = trackingBoard.Cells;
+        CurrentTurnPlayerId = currentTurnPlayerId;
+    }
+
+    public GameBoardViewModel()
+    {
+        BoardSize = GameBoard.BoardSize;
+        PlayerBoard = new CellState[BoardSize, BoardSize];
+        TrackingBoard = new CellState[BoardSize, BoardSize];
+    }
+}
+models/Ship.cs:---------------------------------------------------------------------------------------------------------
+namespace BattleshipGame.Models
+{
+    public class Ship
+    {
+        public int Size { get; set; }
+        public bool IsVertical { get; set; }
+        public int X { get; set; }
+        public int Y { get; set; }
+    }
+}
+models/ShipGenerator.cs:------------------------------------------------------------------------------------------------
+using System;
+using System.Collections.Generic;
+
+namespace BattleshipGame.Models
+{
+    public static class ShipGenerator
+    {
+        private static readonly List<int> ShipSizes = new List<int> { 5, 4, 3, 3, 2 };
+        private static Random random = new Random();
+
+        private static bool CanPlaceShip(GameBoard board, int size, bool isVertical, int x, int y)
+        {
+            if (isVertical)
+            {
+                if (x + size > GameBoard.BoardSize) return false;
+                for (int i = 0; i < size; i++)
+                {
+                    if (board.Cells[x + i, y] != CellState.Empty) return false;
+                }
+            }
+            else
+            {
+                if (y + size > GameBoard.BoardSize) return false;
+                for (int i = 0; i < size; i++)
+                {
+                    if (board.Cells[x, y + i] != CellState.Empty) return false;
+                }
+            }
+            return true;
+        }
+
+        private static void PlaceShip(GameBoard board, int size, bool isVertical, int x, int y)
+        {
+            if (isVertical)
+            {
+                for (int i = 0; i < size; i++)
+                {
+                    board.Cells[x + i, y] = CellState.Ship;
+                }
+            }
+            else
+            {
+                for (int i = 0; i < size; i++)
+                {
+                    board.Cells[x, y + i] = CellState.Ship;
+                }
+            }
+        }
+
+        public static void GenerateShips(GameBoard board)
+        {
+            foreach (int size in ShipSizes)
+            {
+                bool placed = false;
+                while (!placed)
+                {
+                    bool isVertical = random.Next(2) == 0;
+                    int x = random.Next(GameBoard.BoardSize);
+                    int y = random.Next(GameBoard.BoardSize);
+
+                    if (CanPlaceShip(board, size, isVertical, x, y))
+                    {
+                        PlaceShip(board, size, isVertical, x, y);
+                        placed = true;
+                    }
+                }
+            }
+        }
+    }
+}
+hubs/gameHub.cs:--------------------------------------------------------------------------------------------------------
+using BattleshipGame.Data;
+using BattleshipGame.Models;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
+using System.Collections.Concurrent;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace BattleshipGame.Hubs
+{
+    public class GameHub : Hub
+    {
+        private static readonly ConcurrentDictionary<string, string> Users = new ConcurrentDictionary<string, string>();
+        private static readonly ConcurrentQueue<string> PlayerQueue = new ConcurrentQueue<string>(new[] { "Player 1", "Player 2" });
+        private static string CurrentTurnPlayerId;
+        private readonly ApplicationDbContext _context;
+        private readonly ILogger<GameHub> _logger;
+
+        public GameHub(ApplicationDbContext context, ILogger<GameHub> logger)
+        {
+            _context = context;
+            _logger = logger;
+        }
+
+        public override async Task OnConnectedAsync()
+        {
+            _logger.LogInformation("Client connected: {ConnectionId}", Context.ConnectionId);
+
+            if (Users.Count >= 2)
+            {
+                _logger.LogWarning("Connection attempt rejected, game room is full: {ConnectionId}", Context.ConnectionId);
+                await Clients.Caller.SendAsync("ReceiveMessage", "System", "Game room is full.");
+                Context.Abort();
+            }
+            else
+            {
+                await base.OnConnectedAsync();
+                _logger.LogInformation("Client successfully connected: {ConnectionId}", Context.ConnectionId);
+            }
+        }
+
+        public override async Task OnDisconnectedAsync(Exception exception)
+        {
+            _logger.LogInformation("Client disconnected: {ConnectionId}", Context.ConnectionId);
+
+            if (Users.TryRemove(Context.ConnectionId, out var player))
+            {
+                PlayerQueue.Enqueue(player);
+                await Clients.All.SendAsync("ReceiveMessage", "System", $"{player} has left the game.");
+                await Clients.All.SendAsync("UpdatePlayers", Users.Values);
+
+                _logger.LogInformation("Player removed: {Player}", player);
+            }
+
+            if (Context.ConnectionId == CurrentTurnPlayerId)
+            {
+                CurrentTurnPlayerId = Users.Keys.FirstOrDefault(); // Assign turn to another player if the current turn player disconnects
+                await Clients.All.SendAsync("UpdateCurrentTurn", CurrentTurnPlayerId);
+                _logger.LogInformation("Turn reassigned to: {CurrentTurnPlayerId}", CurrentTurnPlayerId);
+            }
+
+            await base.OnDisconnectedAsync(exception);
+        }
+
+        public async Task RegisterPlayer(string userName)
+        {
+            _logger.LogInformation("Registering player: {UserName}, ConnectionId: {ConnectionId}", userName, Context.ConnectionId);
+
+            if (Users.Count >= 2)
+            {
+                _logger.LogWarning("Registration failed, game room is full: {UserName}, ConnectionId: {ConnectionId}", userName, Context.ConnectionId);
+                await Clients.Caller.SendAsync("ReceiveMessage", "System", "Game room is full.");
+                Context.Abort();
+                return;
+            }
+
+            if (PlayerQueue.TryDequeue(out var player))
+            {
+                Users[Context.ConnectionId] = userName;
+                await Clients.All.SendAsync("ReceiveMessage", "System", $"Welcome {userName}!");
+                await Clients.All.SendAsync("UpdatePlayers", Users.Values);
+                await Clients.All.SendAsync("PlayerJoined", Context.ConnectionId, Users.Count);
+
+                _logger.LogInformation("Player registered: {UserName}, PlayerType: {Player}", userName, player);
+
+                if (Users.Count == 1)
+                {
+                    CurrentTurnPlayerId = Context.ConnectionId; // First player to join gets the first turn
+                    _logger.LogInformation("First player to join, assigned turn: {UserName}", userName);
+                }
+            }
+        }
+
+        public async Task StartGame()
+        {
+            var userId = Context.UserIdentifier;
+            _logger.LogInformation("Starting game for user: {UserId}", userId);
+
+            var gameState = _context.GameStates.FirstOrDefault(g => g.PlayerId == userId);
+
+            if (gameState == null)
+            {
+                _logger.LogError("Game state not found for user: {UserId}", userId);
+                await Clients.Caller.SendAsync("ReceiveMessage", "System", "Game state not found.");
+                return;
+            }
+
+            var opponentGameState = _context.GameStates.FirstOrDefault(g => g.PlayerId != userId);
+            if (opponentGameState == null)
+            {
+                _logger.LogError("Opponent not found for user: {UserId}", userId);
+                await Clients.Caller.SendAsync("ReceiveMessage", "System", "Opponent not found.");
+                return;
+            }
+
+            // Determine starting player using coin flip
+            var random = new Random();
+            var startingPlayerId = random.Next(2) == 0 ? userId : opponentGameState.PlayerId;
+
+            gameState.CurrentTurnPlayerId = startingPlayerId;
+            opponentGameState.CurrentTurnPlayerId = startingPlayerId;
+
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Game started, starting player: {StartingPlayerId}", startingPlayerId);
+            await Clients.All.SendAsync("UpdateCurrentTurn", startingPlayerId);
+            await Clients.All.SendAsync("ReceiveMessage", "System", "The game has started!");
+        }
+
+        public async Task MakeMove(string user, int x, int y)
+        {
+            _logger.LogInformation("Move made by user: {user} at ({X}, {Y})", user, x, y);
+
+            if (user != CurrentTurnPlayerId)
+            {
+                _logger.LogWarning("Move attempt out of turn by user: {UserId}", Context.UserIdentifier);
+                await Clients.Caller.SendAsync("ReceiveMessage", "System", "It's not your turn.");
+                return;
+            }
+
+            var gameState = _context.GameStates.FirstOrDefault(g => g.PlayerId == Context.UserIdentifier);
+            if (gameState == null)
+            {
+                _logger.LogError("Game state not found for user: {UserId}", Context.UserIdentifier);
+                await Clients.Caller.SendAsync("ReceiveMessage", "System", "Game state not found.");
+                return;
+            }
+
+            var opponentGameState = _context.GameStates.FirstOrDefault(g => g.PlayerId != Context.UserIdentifier);
+            if (opponentGameState == null)
+            {
+                _logger.LogError("Opponent not found for user: {UserId}", Context.UserIdentifier);
+                await Clients.Caller.SendAsync("ReceiveMessage", "System", "Opponent not found.");
+                return;
+            }
+
+            var opponentBoard = new GameBoard
+            {
+                Cells = JsonConvert.DeserializeObject<CellState[,]>(opponentGameState.PlayerBoard)
+            };
+
+            var cellState = opponentBoard.Cells[x, y];
+            bool hit = false;
+            if (cellState == CellState.Ship)
+            {
+                opponentBoard.Cells[x, y] = CellState.Hit;
+                hit = true;
+                _logger.LogInformation("Hit registered at ({X}, {Y}) by user: {UserId}", x, y, Context.UserIdentifier);
+            }
+            else if (cellState == CellState.Empty)
+            {
+                opponentBoard.Cells[x, y] = CellState.Miss;
+                _logger.LogInformation("Miss registered at ({X}, {Y}) by user: {UserId}", x, y, Context.UserIdentifier);
+            }
+
+            opponentGameState.PlayerBoard = JsonConvert.SerializeObject(opponentBoard.Cells);
+            gameState.CurrentTurnPlayerId = opponentGameState.PlayerId;
+
+            _context.SaveChanges();
+
+            CurrentTurnPlayerId = opponentGameState.PlayerId;
+
+            await Clients.All.SendAsync("ReceiveMove", Context.ConnectionId, x, y, hit);
+            await Clients.Client(opponentGameState.PlayerId).SendAsync("OpponentMove", x, y, hit);
+            await Clients.All.SendAsync("UpdateCurrentTurn", CurrentTurnPlayerId);
+
+            _logger.LogInformation("Turn updated to: {CurrentTurnPlayerId}", CurrentTurnPlayerId);
+        }
+
+        public async Task SendMessage(string userName, string message)
+        {
+            _logger.LogInformation("Message sent by user: {UserName} - {Message}", userName, message);
+
+            await Clients.All.SendAsync("ReceiveMessage", userName, message);
+        }
+
+        public async Task SendMove(string userName, int x, int y)
+        {
+            _logger.LogInformation("Move sent by user: {UserName} - ({X}, {Y})", userName, x, y);
+            await MakeMove(userName, x, y);
+        }
+    }
+}
+Qeustion:===============================================================================================================
+pls writhe some tests for the backend exmple:
+
+```cs
+using NUnit.Framework;
+using BattleshipGame.Controllers;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
+
+namespace BattleshipGame.Controllers.Tests
+{
+    [TestFixture()]
+    public class GameControllerTests
+    {
+        [Test()]
+        public void GameTest()
+        {
+            throw new NotImplementedException();
+        }
+    }
+}
+```
+when writhing add comments why the are importent to test
+secondly vor the front end i want to use cypress to test is that posyble in visual studio
+if you make improfement to the code give a full code block

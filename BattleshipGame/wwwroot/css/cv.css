@@ -1,0 +1,45 @@
+﻿.profile-__title {
+    color: var(--ac-primary);
+}
+
+.profile-content__skillList {
+    display: flex;
+    flex-direction: row;
+}
+
+.profile-content__category-title {
+    margin-bottom: 0rem;
+}
+
+.skill-item {
+    list-style: square;
+    color: var(--ac-primary);
+    width: 100%;
+}
+
+.profile-content__element-header {
+    display: flex;
+    width: 100%;
+    flex-direction: row;
+}
+
+.profile-content__title {
+    width: 50%;
+    text-align: left;
+    font-size: large;
+}
+
+.profile-content__period {
+    color: var(--ac-primary);
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    justify-content: end;
+    width: 50%;
+    font-size: small;
+}
+
+.profile-content__institute {
+    margin-top: -1rem;
+    font-size: smaller;
+}

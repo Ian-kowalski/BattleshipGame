@@ -33,12 +33,14 @@
 }
 
 #boards {
+    
     display: flex;
     justify-content: space-around;
     width: 100%;
 }
 
 .board {
+    margin: 5px;
     display: grid;
     grid-template-columns: repeat(10, 30px);
     grid-template-rows: repeat(10, 30px);

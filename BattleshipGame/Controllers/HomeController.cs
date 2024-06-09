@@ -1,4 +1,5 @@
 using BattleshipGame.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
 
@@ -14,6 +15,12 @@ namespace BattleshipGame.Controllers
         }
 
         public IActionResult Index()
+        {
+            return View();
+        }
+
+        [AllowAnonymous]
+        public IActionResult Contact()
         {
             return View();
         }

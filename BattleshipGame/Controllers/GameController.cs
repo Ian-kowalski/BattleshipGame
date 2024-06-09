@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using System.Threading.Tasks;
 using BattleshipGame.Hubs;
+using Microsoft.EntityFrameworkCore;
 
 namespace BattleshipGame.Controllers
 {
@@ -26,9 +27,8 @@ namespace BattleshipGame.Controllers
 
         public async Task<IActionResult> Game()
         {
-            var userId = _userManager.GetUserId(User);
             var userName = User.Identity?.Name; // Fetch the username
-            var gameState = _context.GameStates.FirstOrDefault(g => g.PlayerId == userId);
+            var gameState = _context.GameStates.FirstOrDefault(g => g.PlayerId == userName);
 
             GameBoard playerBoard;
             GameBoard trackingBoard;
@@ -49,16 +49,16 @@ namespace BattleshipGame.Controllers
 
                 gameState = new GameState
                 {
-                    PlayerId = userId,
+                    PlayerId = userName,
                     PlayerBoard = JsonConvert.SerializeObject(playerBoard.Cells),
                     TrackingBoard = JsonConvert.SerializeObject(trackingBoard.Cells),
-                    CurrentTurnPlayerId = allGameStates.Count == 0 ? userId : allGameStates[0].PlayerId // Assign turn to first player if first to join
+                    CurrentTurnPlayerId = allGameStates.Count == 0 ? userName : allGameStates[0].PlayerId // Assign turn to first player if first to join
                 };
 
                 _context.GameStates.Add(gameState);
                 await _context.SaveChangesAsync();
 
-                await _hubContext.Clients.All.SendAsync("PlayerJoined", userId, allGameStates.Count + 1);
+                await _hubContext.Clients.All.SendAsync("PlayerJoined", userName, allGameStates.Count + 1);
             }
             else
             {
@@ -75,16 +75,50 @@ namespace BattleshipGame.Controllers
             currentTurnPlayerId = gameState.CurrentTurnPlayerId;
 
             var viewModel = new GameBoardViewModel(playerBoard, trackingBoard, currentTurnPlayerId);
-            ViewBag.UserId = userId; // Pass the user ID to the view using ViewBag
             ViewBag.UserName = userName; // Pass the username to the view using ViewBag
             return View(viewModel);
         }
 
         [HttpPost]
+        public async Task<IActionResult> StartGame()
+        {
+            var userName = User.Identity?.Name;
+            if (string.IsNullOrEmpty(userName))
+            {
+                return Unauthorized();
+            }
+
+            var gameState = await _context.GameStates.FirstOrDefaultAsync(g => g.PlayerId == userName);
+            if (gameState == null)
+            {
+                return BadRequest("Game state not found.");
+            }
+
+            var opponentGameState = await _context.GameStates.FirstOrDefaultAsync(g => g.PlayerId != userName);
+            if (opponentGameState == null)
+            {
+                return BadRequest("Opponent not found.");
+            }
+
+            var random = new Random();
+            var startingPlayerId = random.Next(2) == 0 ? userName : opponentGameState.PlayerId;
+
+            gameState.CurrentTurnPlayerId = startingPlayerId;
+            opponentGameState.CurrentTurnPlayerId = startingPlayerId;
+
+            await _context.SaveChangesAsync();
+
+            await _hubContext.Clients.All.SendAsync("UpdateCurrentTurn", startingPlayerId);
+            return Ok();
+        }
+
+
+
+        [HttpPost]
         public async Task<IActionResult> MakeMove(int x, int y)
         {
-            var userId = _userManager.GetUserId(User);
-            var gameState = _context.GameStates.FirstOrDefault(g => g.PlayerId == userId);
+            var userName = User.Identity?.Name; // Fetch the username
+            var gameState = _context.GameStates.FirstOrDefault(g => g.PlayerId == userName);
 
             if (gameState == null)
             {
@@ -100,12 +134,12 @@ namespace BattleshipGame.Controllers
                 Cells = JsonConvert.DeserializeObject<CellState[,]>(gameState.TrackingBoard)
             };
 
-            if (gameState.CurrentTurnPlayerId != userId)
+            if (gameState.CurrentTurnPlayerId != userName)
             {
                 return BadRequest("It's not your turn.");
             }
 
-            var opponentGameState = _context.GameStates.FirstOrDefault(g => g.PlayerId != userId);
+            var opponentGameState = _context.GameStates.FirstOrDefault(g => g.PlayerId != userName);
             if (opponentGameState == null)
             {
                 return BadRequest("Opponent not found.");
@@ -137,7 +171,7 @@ namespace BattleshipGame.Controllers
 
             _context.SaveChanges();
 
-            await _hubContext.Clients.All.SendAsync("ReceiveMove", userId, x, y, hit);
+            await _hubContext.Clients.All.SendAsync("ReceiveMove", userName, x, y, hit);
             await _hubContext.Clients.User(opponentGameState.PlayerId).SendAsync("OpponentMove", x, y, hit);
 
             return Json(new { hit });
