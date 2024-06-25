@@ -31,6 +31,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Migrations\" />
+    <Folder Include="NewFolder\" />
     <Folder Include="wwwroot\js\game\" />
   </ItemGroup>
 
