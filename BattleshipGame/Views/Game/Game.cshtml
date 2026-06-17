@@ -1,11 +1,12 @@
 ﻿@model BattleshipGame.Models.GameBoardViewModel
 
-
-
-@* <button id="startGameButton" disabled>Start Game</button> *@
 <h2>Battleship Game</h2>
+<div style="margin-bottom:10px; display:flex; gap:8px; align-items:center;">
+    <button id="startGameButton" disabled>Start Game</button>
+    <button id="resetGameButton" style="display:none;">New Game</button>
+    <span id="turnIndicator" style="font-weight:bold;"></span>
+</div>
 <game-board id="gameBoard"></game-board>
-
 
 @section Scripts {
     <script src="~/js/signalr/dist/browser/signalr.js"></script>
@@ -15,6 +16,8 @@
             customElements.whenDefined('game-board').then(() => {
                 const gameBoardElement = document.getElementById('gameBoard');
                 const startGameButton = document.getElementById('startGameButton');
+                const resetGameButton = document.getElementById('resetGameButton');
+                const turnIndicator = document.getElementById('turnIndicator');
                 const userName = '@ViewBag.UserName';
                 const boardState = @Html.Raw(Newtonsoft.Json.JsonConvert.SerializeObject(new
             {
@@ -26,14 +29,36 @@
                 gameBoardElement.setPlayerInfo(userName);
                 gameBoardElement.setBoardState(boardState);
 
+                gameBoardElement.addEventListener('playerjoined', function (e) {
+                    if (e.detail >= 2) startGameButton.disabled = false;
+                });
+
+                gameBoardElement.addEventListener('gameover', function (e) {
+                    startGameButton.style.display = 'none';
+                    resetGameButton.style.display = 'inline';
+                    turnIndicator.textContent = e.detail === userName ? '🎉 You won!' : `${e.detail} won!`;
+                });
+
+                gameBoardElement.addEventListener('gamereset', function () {
+                    window.location.href = '/Game/Game';
+                });
+
+                gameBoardElement.addEventListener('turnchanged', function (e) {
+                    turnIndicator.textContent = e.detail === userName ? 'Your turn' : `${e.detail}'s turn`;
+                });
+
                 startGameButton.addEventListener('click', function () {
                     fetch('/Game/StartGame', { method: 'POST' })
                         .then(response => {
-                            if (response.ok) {
-                                console.log('Game started successfully');
-                            } else {
-                                console.error('Failed to start game');
-                            }
+                            if (response.ok) startGameButton.disabled = true;
+                            else console.error('Failed to start game');
+                        });
+                });
+
+                resetGameButton.addEventListener('click', function () {
+                    fetch('/Game/ResetGame', { method: 'POST' })
+                        .then(response => {
+                            if (!response.ok) console.error('Failed to reset game');
                         });
                 });
             });

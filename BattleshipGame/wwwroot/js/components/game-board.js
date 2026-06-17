@@ -3,9 +3,11 @@ class GameBoard extends HTMLElement {
         super();
         this.attachShadow({ mode: 'open' });
         this.render();
-        this.setupSignalR();
         this.boardsInitialized = false;
         this.userName = '';
+        this.currentTurnPlayerId = null;
+        this.gameOver = false;
+        this.setupSignalR();
     }
 
     render() {
@@ -19,6 +21,10 @@ class GameBoard extends HTMLElement {
                         <button id="sendButton">Send</button>
                     </div>
                 </div>
+                <div id="boardLabels">
+                    <span>Your Board</span>
+                    <span>Tracking Board</span>
+                </div>
                 <div id="boards">
                     <div id="yourBoard" class="board"></div>
                     <div id="trackingBoard" class="board"></div>
@@ -31,14 +37,12 @@ class GameBoard extends HTMLElement {
     }
 
     setPlayerInfo(userName) {
-        console.log(`Setting player info: ${userName}`);
         this.userName = userName;
     }
 
     initializeBoards() {
         if (this.boardsInitialized) return;
 
-        console.log('Initializing boards');
         const yourBoard = this.shadowRoot.getElementById('yourBoard');
         const trackingBoard = this.shadowRoot.getElementById('trackingBoard');
 
@@ -48,11 +52,15 @@ class GameBoard extends HTMLElement {
             yourBoard.appendChild(yourCell);
 
             const trackingCell = document.createElement('div');
-            trackingCell.className = 'cell';
-            trackingCell.classList.add('trackingCell');
+            trackingCell.className = 'cell trackingCell';
             trackingBoard.appendChild(trackingCell);
 
             trackingCell.addEventListener('click', () => {
+                if (this.gameOver) return;
+                if (this.currentTurnPlayerId !== this.userName) {
+                    this.addMessage('System', "It's not your turn.");
+                    return;
+                }
                 const x = Math.floor(i / 10);
                 const y = i % 10;
                 this.makeMove(x, y);
@@ -76,18 +84,21 @@ class GameBoard extends HTMLElement {
         });
 
         messageInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendButton.click();
-            }
+            if (e.key === 'Enter') sendButton.click();
         });
     }
 
+    addMessage(user, message) {
+        const messagesDiv = this.shadowRoot.getElementById('messages');
+        const el = document.createElement('div');
+        el.textContent = `${user}: ${message}`;
+        messagesDiv.appendChild(el);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
 
     setBoardState(boardState) {
-        console.log(`Setting board state:`, boardState);
         const yourBoard = this.shadowRoot.getElementById('yourBoard');
         const trackingBoard = this.shadowRoot.getElementById('trackingBoard');
-
         const { PlayerBoard, TrackingBoard, CurrentTurnPlayerId } = boardState;
 
         if (!PlayerBoard || !TrackingBoard) return;
@@ -95,69 +106,95 @@ class GameBoard extends HTMLElement {
         [...yourBoard.children].forEach((cell, index) => {
             const x = Math.floor(index / 10);
             const y = index % 10;
-            const cellState = PlayerBoard[x][y];
+            const state = PlayerBoard[x][y];
             cell.className = 'cell';
-            if (cellState === 1) cell.classList.add('ship');
-            if (cellState === 2) cell.classList.add('hit');
-            if (cellState === 3) cell.classList.add('miss');
+            if (state === 1) cell.classList.add('ship');
+            if (state === 2) cell.classList.add('hit');
+            if (state === 3) cell.classList.add('miss');
         });
 
         [...trackingBoard.children].forEach((cell, index) => {
             const x = Math.floor(index / 10);
             const y = index % 10;
-            const cellState = TrackingBoard[x][y];
+            const state = TrackingBoard[x][y];
             cell.className = 'cell trackingCell';
-            if (cellState === 2) cell.classList.add('hit');
-            if (cellState === 3) cell.classList.add('miss');
+            if (state === 2) cell.classList.add('hit');
+            if (state === 3) cell.classList.add('miss');
         });
 
-        console.log(`Current Turn Player ID: ${CurrentTurnPlayerId}`);
+        if (CurrentTurnPlayerId) {
+            this.currentTurnPlayerId = CurrentTurnPlayerId;
+        }
+    }
+
+    updateTrackingCell(x, y, hit) {
+        const trackingBoard = this.shadowRoot.getElementById('trackingBoard');
+        const index = x * 10 + y;
+        const cell = trackingBoard.children[index];
+        if (!cell) return;
+        cell.className = 'cell trackingCell';
+        cell.classList.add(hit ? 'hit' : 'miss');
+    }
+
+    updatePlayerCell(x, y, hit) {
+        const yourBoard = this.shadowRoot.getElementById('yourBoard');
+        const index = x * 10 + y;
+        const cell = yourBoard.children[index];
+        if (!cell) return;
+        cell.className = 'cell';
+        cell.classList.add(hit ? 'hit' : 'miss');
     }
 
     setupSignalR() {
-        console.log('Setting up SignalR');
         this.connection = new signalR.HubConnectionBuilder()
             .withUrl("/gameHub")
             .build();
 
         this.connection.start()
             .then(() => {
-                console.log('Connected to SignalR');
                 this.connection.invoke('RegisterPlayer', this.userName)
                     .catch(err => console.error(err));
             })
             .catch(err => console.error(err));
 
         this.connection.on('ReceiveMessage', (user, message) => {
-            const messagesDiv = this.shadowRoot.getElementById('messages');
-            const messageElement = document.createElement('div');
-            messageElement.textContent = `${user}: ${message}`;
-            messagesDiv.appendChild(messageElement);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+            this.addMessage(user, message);
         });
 
         this.connection.on('PlayerJoined', (userId, playerCount) => {
-            console.log(`Player joined: ${userId} (Total: ${playerCount})`);
-            if (playerCount === 2) {
-                const startGameButton = this.shadowRoot.getElementById('startGameButton');
-                startGameButton.disabled = false; // Enable start game button when the second player joins
+            this.dispatchEvent(new CustomEvent('playerjoined', { detail: playerCount, bubbles: true }));
+        });
+
+        this.connection.on('UpdateCurrentTurn', (playerId) => {
+            this.currentTurnPlayerId = playerId;
+            this.dispatchEvent(new CustomEvent('turnchanged', { detail: playerId, bubbles: true }));
+        });
+
+        // ReceiveMove fires for all clients — check if it's our move or opponent's
+        this.connection.on('ReceiveMove', (user, x, y, hit) => {
+            if (user === this.userName) {
+                this.updateTrackingCell(x, y, hit);
+            } else {
+                this.updatePlayerCell(x, y, hit);
             }
         });
 
-        this.connection.on('ReceiveMove', (user, x, y) => {
-            console.log(`Received move: ${user} shot at (${x}, ${y})`);
-            // Handle the move, update the board
+        this.connection.on('GameOver', (winner) => {
+            this.gameOver = true;
+            this.addMessage('System', winner === this.userName ? '🎉 You won!' : `${winner} won!`);
+            this.dispatchEvent(new CustomEvent('gameover', { detail: winner, bubbles: true }));
+        });
+
+        this.connection.on('GameReset', () => {
+            this.dispatchEvent(new CustomEvent('gamereset', { bubbles: true }));
         });
 
         this.connection.on('ReceiveGameState', (gameState) => {
-            console.log(`Received game state:`, gameState);
             this.setBoardState(gameState);
         });
     }
 
-
     makeMove(x, y) {
-        console.log(`Making move at (${x}, ${y})`);
         this.connection.invoke('SendMove', this.userName, x, y)
             .catch(err => console.error(err));
     }

@@ -168,14 +168,37 @@ namespace BattleshipGame.Hubs
             }
 
             opponentGameState.PlayerBoard = JsonConvert.SerializeObject(opponentBoard);
-            gameState.CurrentTurnPlayerId = opponentGameState.PlayerId;
+
+            bool gameOver = !opponentBoard.Cast<CellState>().Any(c => c == CellState.Ship);
+
+            if (!gameOver)
+            {
+                gameState.CurrentTurnPlayerId = opponentGameState.PlayerId;
+                CurrentTurnPlayerId = opponentGameState.PlayerId;
+            }
+
             await _context.SaveChangesAsync();
 
-            CurrentTurnPlayerId = opponentGameState.PlayerId;
-
             await Clients.All.SendAsync("ReceiveMove", user, x, y, hit);
-            await Clients.Client(opponentGameState.PlayerId).SendAsync("OpponentMove", x, y, hit);
             await Clients.All.SendAsync("UpdateCurrentTurn", CurrentTurnPlayerId);
+
+            if (gameOver)
+                await Clients.All.SendAsync("GameOver", user);
+        }
+
+        public async Task ResetGame()
+        {
+            var allStates = _context.GameStates.ToList();
+            _context.GameStates.RemoveRange(allStates);
+            await _context.SaveChangesAsync();
+
+            Users.Clear();
+            while (PlayerQueue.TryDequeue(out _)) { }
+            PlayerQueue.Enqueue("Player 1");
+            PlayerQueue.Enqueue("Player 2");
+            CurrentTurnPlayerId = null;
+
+            await Clients.All.SendAsync("GameReset");
         }
 
         public async Task SendMessage(string userName, string message)

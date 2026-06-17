@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BattleshipGame.Controllers
 {
-    //[Authorize]
+    [Authorize]
     public class GameController : Controller
     {
         private readonly ApplicationDbContext _context;
@@ -167,14 +167,29 @@ namespace BattleshipGame.Controllers
             trackingBoard.Cells[x, y] = hit ? CellState.Hit : CellState.Miss;
             gameState.TrackingBoard = JsonConvert.SerializeObject(trackingBoard.Cells);
 
-            gameState.CurrentTurnPlayerId = opponentGameState.PlayerId;
+            bool gameOver = !opponentBoard.Cells.Cast<CellState>().Any(c => c == CellState.Ship);
+
+            if (!gameOver)
+                gameState.CurrentTurnPlayerId = opponentGameState.PlayerId;
 
             _context.SaveChanges();
 
             await _hubContext.Clients.All.SendAsync("ReceiveMove", userName, x, y, hit);
-            await _hubContext.Clients.User(opponentGameState.PlayerId).SendAsync("OpponentMove", x, y, hit);
 
-            return Json(new { hit });
+            if (gameOver)
+                await _hubContext.Clients.All.SendAsync("GameOver", userName);
+
+            return Json(new { hit, gameOver });
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> ResetGame()
+        {
+            var allStates = _context.GameStates.ToList();
+            _context.GameStates.RemoveRange(allStates);
+            await _context.SaveChangesAsync();
+            await _hubContext.Clients.All.SendAsync("GameReset");
+            return Ok();
         }
     }
 }
